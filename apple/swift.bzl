@@ -26,6 +26,9 @@ load("@build_bazel_rules_apple//apple:utils.bzl",
      "label_scoped_path")
 load("@build_bazel_rules_apple//apple/bundling:xcode_support.bzl",
      "xcode_support")
+load(":modulemap.bzl",
+     "modulemap_action",
+     "module")
 
 def _parent_dirs(dirs):
   """Returns a set of parent directories for each directory in dirs."""
@@ -195,6 +198,39 @@ def _validate_rule_and_deps(ctx):
     if not _is_valid_swift_module_name(dep.label.name):
       fail(name_error_str % dep.label)
 
+def _modulemap_info(
+    name,
+    output_header,
+    objc_providers,
+    unextended=False):
+  """Returns kwargs to be passed into modulemap_action"""
+  external_modules = {}
+
+  for o in objc_providers:
+    if len(o.top_level_module_map) and len(o.top_level_module_name):
+      if  len(o.top_level_module_map) != 1:
+        fail("Expected only one entyr in top_level_module_map, but got " + str(o.top_level_module_map))
+      elif len(o.top_level_module_name) != 1:
+        fail("Expected only one entry in top_level_module_name, but got " + str(o.top_level_module_name))
+
+      use_name = list(o.top_level_module_name)[0]
+      use_artifact = list(o.top_level_module_map)[0]
+      external_modules[use_name] = use_artifact
+
+  maybe_extra_swift_module = [] if unextended else [module(
+                                     name=name + ".Swift",
+                                     hdrs = [output_header],
+                                     export = [],
+                                   )]
+
+  main_module = module(
+    name = name,
+    use = external_modules.keys(),
+  )
+  return dict(
+    modules=[main_module] + maybe_extra_swift_module,
+    external_modules = external_modules,
+  )
 
 def _get_wmo_state(ctx):
   """Returns the status of Whole Module Optimization feature.
@@ -330,7 +366,7 @@ def swiftc_args(ctx):
 
   include_args = ["-I%s" % d for d in include_dirs + objc_includes]
   framework_args = ["-F%s" % x for x in framework_dirs]
-  define_args = ["-D%s" % x for x in swiftc_defines]
+  define_args = ["-D%s" % x for x in set(swiftc_defines)]
 
   # Disable the LC_LINKER_OPTION load commands for static frameworks automatic
   # linking. This is needed to correctly deduplicate static frameworks from also
@@ -348,7 +384,7 @@ def swiftc_args(ctx):
       ["-iquote", "."]
 
       # Pass DEFINE or copt values from objc configuration and rules to clang
-      + ["-D" + x for x in objc_defines] + ctx.fragments.objc.copts
+      + list(set(["-D" + x for x in objc_defines] + ctx.fragments.objc.copts))
       + _clang_compilation_mode_flags(ctx)
 
       # Load module maps explicitly instead of letting Clang discover them on
@@ -356,7 +392,8 @@ def swiftc_args(ctx):
       # same header both in modular and non-modular contexts, leading to
       # duplicate definitions in the same file.
       # https://llvm.org/bugs/show_bug.cgi?id=19501
-      + ["-fmodule-map-file=%s" % x.path for x in objc_module_maps])
+      + ["-fmodule-map-file=%s" % x.path for x in objc_module_maps]
+)
 
   args = [
       "-emit-object",
@@ -434,15 +471,17 @@ def _swift_library_impl(ctx):
 
   # Collect transitive dependecies.
   dep_modules = depset()
+  transitive_include_paths = depset()
   dep_libs = depset()
   swiftc_defines = ctx.attr.defines
 
-  swift_providers = [x[SwiftInfo] for x in ctx.attr.deps if SwiftInfo in x]
+  swift_providers = [x[SwiftInfo] or x.swift for x in ctx.attr.deps if SwiftInfo in x or hasattr(x, "swift")]
   objc_providers = [x.objc for x in ctx.attr.deps if hasattr(x, "objc")]
 
   for swift in swift_providers:
     dep_libs += swift.transitive_libs
     dep_modules += swift.transitive_modules
+    transitive_include_paths += swift.transitive_include_paths
     swiftc_defines += swift.transitive_defines
 
   # A unique path for rule's outputs.
@@ -452,8 +491,42 @@ def _swift_library_impl(ctx):
   output_lib = ctx.new_file(objs_outputs_path + module_name + ".a")
   output_module = ctx.new_file(objs_outputs_path + module_name + ".swiftmodule")
 
+  transitive_include_paths += depset([output_module.dirname])
+
   # These filenames are guaranteed to be unique, no need to scope.
-  output_header = ctx.new_file(ctx.label.name + "-Swift.h")
+  output_header = ctx.new_file(module_name + "/" + module_name + "-Swift.h")
+
+  unextended_modulemap = None
+  for p in objc_providers:
+    if module_name in p.top_level_module_name:
+      unextended_modulemap = list(p.top_level_module_map)[0]
+      break
+
+  if not unextended_modulemap:
+    # Unextended modulemap is used when compiling ourselves. It does not contain the .Swift clang submodule.
+    unextended_modulemap = ctx.new_file(ctx.label.name + "-unextended.modulemap")
+    modulemap_action(ctx, output=unextended_modulemap, **_modulemap_info(module_name, output_header, objc_providers, unextended=True))
+
+  # This is the modulemap our dependents use. It includes our -Swift header.
+  output_module_info = _modulemap_info(module_name, output_header, objc_providers)
+  partial_output_modulemap = ctx.new_file(module_name + "-Swift.modulemap.tmp")
+  ctx.file_action(output=partial_output_modulemap, content="""
+module {name}.Swift {{
+  header "../{name}/{name}-Swift.h"
+}}
+""".format(name=module_name))
+
+  output_modulemap = ctx.new_file(ctx.label.name + ".modulemaps/" + ctx.label.name + ".modulemap")
+
+  ctx.action(
+      outputs=[output_modulemap],
+      inputs=[unextended_modulemap, partial_output_modulemap],
+      arguments=[unextended_modulemap.path, partial_output_modulemap.path, output_modulemap.path],
+      command="cat $1 $2 > $3",
+#      use_default_shell_env=True,
+      mnemonic="ConcatModuleMap",
+  )
+
   swiftc_output_map_file = ctx.new_file(ctx.label.name + ".output_file_map.json")
 
   swiftc_output_map = struct()  # Maps output types to paths.
@@ -494,6 +567,7 @@ def _swift_library_impl(ctx):
 
   args = _swift_xcrun_args(ctx) + ["swiftc"] + swiftc_args(ctx)
   args += [
+      "-Xcc", "-fmodule-map-file=" + unextended_modulemap.path,
       "-I" + output_module.dirname,
       "-emit-module-path",
       output_module.path,
@@ -501,7 +575,7 @@ def _swift_library_impl(ctx):
       output_header.path,
       "-output-file-map",
       swiftc_output_map_file.path,
-  ]
+  ] + _intersperse("-I", transitive_include_paths)
 
   if has_wmo:
     if not has_wmo_flag:
@@ -516,7 +590,7 @@ def _swift_library_impl(ctx):
 
   xcrun_action(
       ctx,
-      inputs=swiftc_inputs(ctx) + [swiftc_output_map_file],
+      inputs=swiftc_inputs(ctx) + [swiftc_output_map_file, unextended_modulemap],
       outputs=[output_module, output_header] + output_objs + swiftc_outputs,
       mnemonic="SwiftCompile",
       arguments=args,
@@ -550,9 +624,25 @@ def _swift_library_impl(ctx):
       library=depset([output_lib]) + dep_libs,
       header=depset([output_header]),
       providers=objc_providers,
+      top_level_module_map=set([output_modulemap]),
+      top_level_module_name=set([module_name]),
+      module_map=set([output_modulemap]),
       linkopt=_swift_linkopts(ctx) + extra_linker_args,
       link_inputs=set([output_module]),
       uses_swift=True,)
+
+  if unextended_modulemap in objc_provider.module_map:
+    # iF the unextended modelmap is in the provider, we should rebuild it w/o the modulemap inside
+    new_objc_properties = {}
+
+    for k in dir(objc_provider):
+      if k == 'module_map':
+        continue
+      new_objc_properties[k] = getattr(objc_provider, k)
+
+    new_objc_properties['module_map'] = set([m for m in objc_provider.module_map if m != unextended_modulemap])
+
+    objc_provider = apple_common.new_objc_provider(**new_objc_properties)
 
   resource_sets = _collect_resource_sets(ctx, module_name)
 
@@ -560,6 +650,7 @@ def _swift_library_impl(ctx):
       "transitive_libs": transitive_libs,
       "transitive_modules": transitive_modules,
       "transitive_defines": swiftc_defines,
+      "transitive_include_paths": transitive_include_paths,
   }
 
   return struct(
