@@ -364,7 +364,8 @@ def swiftc_args(ctx):
   # Include the genfiles root so full-path imports can work for generated protos.
   include_dirs += set([ctx.genfiles_dir.path])
 
-  include_args = ["-I%s" % d for d in include_dirs + objc_includes]
+  include_args = ["-I%s" % d for d in include_dirs + objc_includes if not d.endswith('.hmap')]
+  clang_only_include_args = ["-I%s" % d for d in include_dirs + objc_includes if d.endswith('.hmap')]
   framework_args = ["-F%s" % x for x in framework_dirs]
   define_args = ["-D%s" % x for x in set(swiftc_defines)]
 
@@ -393,6 +394,7 @@ def swiftc_args(ctx):
       # duplicate definitions in the same file.
       # https://llvm.org/bugs/show_bug.cgi?id=19501
       + ["-fmodule-map-file=%s" % x.path for x in objc_module_maps]
+      + clang_only_include_args
 )
 
   args = [
@@ -475,7 +477,7 @@ def _swift_library_impl(ctx):
   dep_libs = depset()
   swiftc_defines = ctx.attr.defines
 
-  swift_providers = [x[SwiftInfo] or x.swift for x in ctx.attr.deps if SwiftInfo in x or hasattr(x, "swift")]
+  swift_providers = [x[SwiftInfo] for x in ctx.attr.deps if SwiftInfo in x]
   objc_providers = [x.objc for x in ctx.attr.deps if hasattr(x, "objc")]
 
   for swift in swift_providers:
@@ -489,9 +491,9 @@ def _swift_library_impl(ctx):
 
   module_name = ctx.attr.module_name or swift_module_name(ctx.label)
   output_lib = ctx.new_file(objs_outputs_path + module_name + ".a")
-  output_module = ctx.new_file(objs_outputs_path + module_name + ".swiftmodule")
+  output_module = ctx.new_file(ctx.label.name + ".modulemaps/" + module_name + ".swiftmodule")
 
-  transitive_include_paths += depset([output_module.dirname])
+  transitive_include_paths += depset([output_module.dirname] + [d.dirname for d in dep_modules])
 
   # These filenames are guaranteed to be unique, no need to scope.
   output_header = ctx.new_file(module_name + "/" + module_name + "-Swift.h")
@@ -516,7 +518,7 @@ module {name}.Swift {{
 }}
 """.format(name=module_name))
 
-  output_modulemap = ctx.new_file(ctx.label.name + ".modulemaps/" + ctx.label.name + ".modulemap")
+  output_modulemap = ctx.new_file(ctx.label.name + ".modulemaps/module.modulemap")
 
   ctx.action(
       outputs=[output_modulemap],
