@@ -28,7 +28,8 @@ load("@build_bazel_rules_apple//apple/bundling:xcode_support.bzl",
      "xcode_support")
 load(":modulemap.bzl",
      "modulemap_action",
-     "module")
+     "module",
+     "combine_modulemap_action")
 
 def _parent_dirs(dirs):
   """Returns a set of parent directories for each directory in dirs."""
@@ -287,7 +288,6 @@ def swiftc_inputs(ctx):
   objc_files = set()
   for objc in objc_providers:
     objc_files += objc.header
-    objc_files += objc.module_map
     objc_files += set(objc.static_framework_file)
     objc_files += set(objc.dynamic_framework_file)
 
@@ -388,12 +388,6 @@ def swiftc_args(ctx):
       + list(set(["-D" + x for x in objc_defines] + ctx.fragments.objc.copts))
       + _clang_compilation_mode_flags(ctx)
 
-      # Load module maps explicitly instead of letting Clang discover them on
-      # search paths. This is needed to avoid a case where Clang may load the
-      # same header both in modular and non-modular contexts, leading to
-      # duplicate definitions in the same file.
-      # https://llvm.org/bugs/show_bug.cgi?id=19501
-      + ["-fmodule-map-file=%s" % x.path for x in objc_module_maps]
       + clang_only_include_args
 )
 
@@ -491,7 +485,7 @@ def _swift_library_impl(ctx):
 
   module_name = ctx.attr.module_name or swift_module_name(ctx.label)
   output_lib = ctx.new_file(objs_outputs_path + module_name + ".a")
-  output_module = ctx.new_file(ctx.label.name + ".modulemaps/" + module_name + ".swiftmodule")
+  output_module = ctx.new_file(objs_outputs_path + module_name + ".swiftmodule")
 
   transitive_include_paths += depset([output_module.dirname] + [d.dirname for d in dep_modules])
 
@@ -518,14 +512,27 @@ module {name}.Swift {{
 }}
 """.format(name=module_name))
 
-  output_modulemap = ctx.new_file(ctx.label.name + ".modulemaps/module.modulemap")
+  output_modulemap = ctx.new_file(ctx.label.name + ".modulemaps/" + module_name + ".modulemap")
+
+  combined_unextended_module_map = ctx.new_file(ctx.label.name + "-combined.modulemap")
+
+  modulemaps = set()
+  for objc in objc_providers:
+    modulemaps += objc.module_map
+
+  combine_modulemap_action(
+      ctx = ctx,
+      merge_executable = ctx.executable._combine_modulemap,
+      merge_runfiles = list(ctx.attr._combine_modulemap[DefaultInfo].default_runfiles.files),
+      inputs = list(modulemaps + set([unextended_modulemap])),
+      output =  combined_unextended_module_map,
+  )
 
   ctx.action(
       outputs=[output_modulemap],
       inputs=[unextended_modulemap, partial_output_modulemap],
       arguments=[unextended_modulemap.path, partial_output_modulemap.path, output_modulemap.path],
       command="cat $1 $2 > $3",
-#      use_default_shell_env=True,
       mnemonic="ConcatModuleMap",
   )
 
@@ -569,7 +576,8 @@ module {name}.Swift {{
 
   args = _swift_xcrun_args(ctx) + ["swiftc"] + swiftc_args(ctx)
   args += [
-      "-Xcc", "-fmodule-map-file=" + unextended_modulemap.path,
+      "-Xcc", "-fmodule-map-file=" + combined_unextended_module_map.path,
+      "-I" + combined_unextended_module_map.dirname,
       "-I" + output_module.dirname,
       "-emit-module-path",
       output_module.path,
@@ -592,7 +600,7 @@ module {name}.Swift {{
 
   xcrun_action(
       ctx,
-      inputs=swiftc_inputs(ctx) + [swiftc_output_map_file, unextended_modulemap],
+      inputs=swiftc_inputs(ctx) + [swiftc_output_map_file, combined_unextended_module_map],
       outputs=[output_module, output_header] + output_objs + swiftc_outputs,
       mnemonic="SwiftCompile",
       arguments=args,
@@ -690,7 +698,11 @@ SWIFT_LIBRARY_ATTRS = {
     "_xcrunwrapper": attr.label(
         executable=True,
         cfg="host",
-        default=Label(XCRUNWRAPPER_LABEL))
+        default=Label(XCRUNWRAPPER_LABEL)),
+    "_combine_modulemap": attr.label(
+        executable=True,
+        cfg="host",
+        default=Label("@build_bazel_rules_apple//apple:combine_modulemap")),
 }
 
 swift_library = rule(

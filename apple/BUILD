@@ -29,3 +29,8 @@ filegroup(
     ],
     visibility = ["//:__pkg__"],
 )
+
+py_binary(
+    name = "combine_modulemap",
+    srcs = ["combine_modulemap.py"],
+)

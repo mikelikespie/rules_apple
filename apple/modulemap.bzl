@@ -161,3 +161,27 @@ def modulemap_action(
   content = "\n".join(modules_contents + extern_contents)
 
   ctx.file_action(output=output, content=content)
+
+def combine_modulemap_action(
+    ctx,
+    merge_executable,
+    merge_runfiles,
+    inputs,
+    output,
+    ):
+  """
+  Merges modules into one file. Updates paths to be relative. Gets rid of all 'extern' modules too.
+  """
+  args = []
+
+  for i in inputs:
+    args += ['-m', i.path]
+  args += ['-o', output.path]
+
+  ctx.action(
+      outputs=[output],
+      inputs=inputs + merge_runfiles,
+      arguments=args,
+      executable=merge_executable,
+      mnemonic="CombineModuleMap",
+  )

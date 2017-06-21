@@ -46,10 +46,16 @@ def _extract_team_prefix_action(ctx):
     The file containing the team prefix extracted from the provisioning
     profile.
   """
+  team_prefix_file = _new_entitlements_artifact(ctx, ".team_prefix_file")
+  if ctx.attr.team_id:
+    ctx.file_action(
+        output = team_prefix_file,
+        content = ctx.attr.team_id,
+    )
+    return team_prefix_file
   provisioning_profile = ctx.file.provisioning_profile
   extract_plist_cmd = plist_support.extract_provisioning_plist_command(
       ctx, provisioning_profile)
-  team_prefix_file = _new_entitlements_artifact(ctx, ".team_prefix_file")
 
   # TODO(b/23975430): Remove the /bin/bash workaround once this bug is fixed.
   apple_action(
@@ -405,6 +411,7 @@ entitlements = rule(
         ),
         # Used to pass the platform type through from the calling rule.
         "platform_type": attr.string(),
+        "team_id": attr.string(),
         "provisioning_profile": attr.label(
             allow_files=[".mobileprovision", ".provisionprofile"],
             single_file=True,

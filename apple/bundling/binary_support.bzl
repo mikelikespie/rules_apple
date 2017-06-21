@@ -95,17 +95,19 @@ def _create_binary(
          attr="binary")
 
   entitlements_value = bundling_args.pop("entitlements", None)
+  team_id = bundling_args.pop("team_id", None)
   linkopts = bundling_args.pop("linkopts", [])
   minimum_os_version = kwargs.get("minimum_os_version")
   provisioning_profile = kwargs.get("provisioning_profile")
 
-  if provisioning_profile:
+  if provisioning_profile or (entitlements_value and team_id):
     entitlements_name = "%s_entitlements" % name
     entitlements(
         name = entitlements_name,
         bundle_id = kwargs.get("bundle_id"),
         entitlements = entitlements_value,
         platform_type = platform_type,
+        team_id = team_id,
         provisioning_profile = provisioning_profile,
     )
     bundling_args["entitlements"] = entitlements_support.device_file_label(
@@ -141,6 +143,7 @@ def _create_binary(
       tags = ["manual"] + kwargs.get("tags", []),
       testonly = kwargs.get("testonly"),
       visibility = kwargs.get("visibility"),
+      enable_modules = False,
   )
   bundling_args["binary"] = apple_binary_name
   bundling_args["deps"] = [apple_binary_name]
