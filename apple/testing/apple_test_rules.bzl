@@ -228,7 +228,7 @@ def _apple_test_impl(ctx, test_type):
       ],
       runfiles=ctx.runfiles(
           files=test_runfiles,
-      ).merge(ctx.attr.runner.data_runfiles),
+      ).merge(ctx.attr.runner.data_runfiles).merge(ctx.attr.runner.default_runfiles),
   )
 
 
