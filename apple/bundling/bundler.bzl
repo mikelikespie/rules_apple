@@ -499,7 +499,8 @@ def _run(
     additional_resource_sets=[],
     embedded_bundles=[],
     framework_files=depset(),
-    is_dynamic_framework=False):
+    is_dynamic_framework=False,
+    skip_swift_support=False):
   """Implements the core bundling logic for an Apple bundle archive.
 
   Args:
@@ -528,6 +529,8 @@ def _run(
         provider keys (such as framework search paths) will be propagated
         appropriately.
     is_dynamic_framework: If True, create this bundle as a dynamic framework.
+    skip_swift_support: If True, don't copy swift runtime support files. This is
+         useful for test bundles since the runtime can get very large.
   Returns:
     A tuple containing three values:
     1. A list of modern providers that should be propagated by the calling rule.
@@ -779,7 +782,7 @@ def _run(
 
   # Compute the Swift libraries that are used by the target currently being
   # built.
-  if swift_support.uses_swift(ctx):
+  if swift_support.uses_swift(ctx) and not skip_swift_support:
     swift_zip = swift_actions.zip_swift_dylibs(ctx, binary_artifact)
 
     if ctx.attr._propagates_frameworks:

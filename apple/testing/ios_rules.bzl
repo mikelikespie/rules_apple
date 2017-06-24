@@ -56,7 +56,8 @@ def _ios_test_bundle_impl(ctx):
       ctx,
       "IosTestArchive", "IosTest",
       bundle_id,
-      binary_artifact=binary_artifact)
+      binary_artifact=binary_artifact,
+      skip_swift_support=True)
   return struct(
       files=additional_outputs,
       instrumented_files=struct(dependency_attributes=["binary", "test_host"]),
