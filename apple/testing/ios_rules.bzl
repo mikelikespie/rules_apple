@@ -15,6 +15,7 @@
 """Bazel rules for iOS tests."""
 
 load("@build_bazel_rules_apple//apple:providers.bzl",
+     "AppleResourceInfo",
      "AppleBundleInfo",
      "IosXcTestBundleInfo")
 load("@build_bazel_rules_apple//apple:utils.bzl",
@@ -52,6 +53,7 @@ def _ios_test_bundle_impl(ctx):
 
   binary_artifact = binary_support.get_binary_provider(
       ctx, apple_common.AppleLoadableBundleBinary).binary
+
   additional_providers, legacy_providers, additional_outputs = bundler.run(
       ctx,
       "IosTestArchive", "IosTest",
@@ -131,6 +133,7 @@ def _ios_test(name,
   linkopts = None
   if not bundle_loader:
     linkopts = ["-rpath", "@loader_path/Frameworks"]
+
 
   native.apple_binary(
       name = test_binary_name,

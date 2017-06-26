@@ -593,6 +593,7 @@ def _run(
 
   resource_sets = list(additional_resource_sets)
 
+
   framework_resource_sets = depset()
 
   if (hasattr(ctx.attr, "exclude_resources") and ctx.attr.exclude_resources):
@@ -606,6 +607,7 @@ def _run(
               framework[_ResourceBundleInfo].resource_sets)
         if ctx.attr._propagates_frameworks:
           propagated_framework_zips.append(framework[AppleBundleInfo].archive)
+
 
     # Add the transitive resource sets, except for those that have already been
     # included by a framework dependency.
@@ -621,6 +623,7 @@ def _run(
         infoplists=target_infoplists,
         resources=target_resources,
     ))
+
 
   # We need to keep track of the Info.plist for the main bundle so that it can
   # be propagated out (for situations where this bundle is a child of another

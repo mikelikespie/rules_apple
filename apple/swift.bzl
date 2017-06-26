@@ -278,8 +278,10 @@ def swiftc_inputs(ctx):
   Returns:
     A list of files needed by swiftc.
   """
-  swift_providers = [x[SwiftInfo] for x in ctx.attr.deps if SwiftInfo in x]
-  objc_providers = [x.objc for x in ctx.attr.deps if hasattr(x, "objc")]
+
+  all_deps = ctx.attr.deps + ctx.attr.non_propagated_deps
+  swift_providers = [x[SwiftInfo] for x in all_deps if SwiftInfo in x]
+  objc_providers = [x.objc for x in all_deps if hasattr(x, "objc")]
 
   dep_modules = depset()
   for swift in swift_providers:
@@ -332,8 +334,11 @@ def swiftc_args(ctx):
   dep_modules = depset()
   swiftc_defines = ctx.attr.defines
 
-  swift_providers = [x[SwiftInfo] for x in ctx.attr.deps if SwiftInfo in x]
-  objc_providers = [x.objc for x in ctx.attr.deps if hasattr(x, "objc")]
+
+  all_deps = ctx.attr.deps + ctx.attr.non_propagated_deps
+
+  swift_providers = [x[SwiftInfo] for x in all_deps if SwiftInfo in x]
+  objc_providers = [x.objc for x in all_deps if hasattr(x, "objc")]
 
   for swift in swift_providers:
     dep_modules += swift.transitive_modules
@@ -471,8 +476,9 @@ def _swift_library_impl(ctx):
   dep_libs = depset()
   swiftc_defines = ctx.attr.defines
 
-  swift_providers = [x[SwiftInfo] for x in ctx.attr.deps if SwiftInfo in x]
-  objc_providers = [x.objc for x in ctx.attr.deps if hasattr(x, "objc")]
+  all_deps = ctx.attr.deps + ctx.attr.non_propagated_deps
+  swift_providers = [x[SwiftInfo] for x in all_deps if SwiftInfo in x]
+  objc_providers = [x.objc for x in all_deps if hasattr(x, "objc")]
 
   for swift in swift_providers:
     dep_libs += swift.transitive_libs
@@ -680,6 +686,10 @@ SWIFT_LIBRARY_ATTRS = {
         # down all deps, but without this, the aspect runs *after* this rule
         # gets to examine its deps (so the AppleResource provider isn't there
         # yet).
+        aspects=[apple_bundling_aspect],
+        providers=[["swift"], ["objc"]]
+    ),
+    "non_propagated_deps": attr.label_list(
         aspects=[apple_bundling_aspect],
         providers=[["swift"], ["objc"]]
     ),
