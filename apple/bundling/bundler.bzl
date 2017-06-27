@@ -785,7 +785,7 @@ def _run(
 
   # Compute the Swift libraries that are used by the target currently being
   # built.
-  if swift_support.uses_swift(ctx) and not skip_swift_support:
+  if swift_support.uses_swift(ctx):
     swift_zip = swift_actions.zip_swift_dylibs(ctx, binary_artifact)
 
     if ctx.attr._propagates_frameworks:
@@ -795,8 +795,10 @@ def _run(
           ctx, swift_zip, "Frameworks"))
 
     platform, _ = platform_support.platform_and_sdk_version(ctx)
-    root_merge_zips.append(bundling_support.bundlable_file(
-        swift_zip, "SwiftSupport/%s" % platform.name_in_plist.lower()))
+
+    if not skip_swift_support:
+      root_merge_zips.append(bundling_support.bundlable_file(
+          swift_zip, "SwiftSupport/%s" % platform.name_in_plist.lower()))
 
   # Add Clang runtime inputs when needed.
   if clang_support.should_package_clang_runtime(ctx):
