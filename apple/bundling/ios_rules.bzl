@@ -74,7 +74,6 @@ def _ios_application_impl(ctx):
         ]
     ))
 
-  # TODO(b/32910122): Obtain framework information from extensions.
   embedded_bundles = [
       bundling_support.embedded_bundle(
           "PlugIns", extension[AppleBundleInfo], verify_bundle_id=True)
@@ -121,12 +120,12 @@ ios_application = rule_factory.make_bundling_rule(
     _ios_application_impl,
     additional_attrs={
         "app_icons": attr.label_list(allow_files=True),
-        "dedupe_unbundled_resources": attr.bool(default=False),
+        "dedupe_unbundled_resources": attr.bool(default=True),
         "extensions": attr.label_list(
             providers=[[AppleBundleInfo, IosExtensionBundleInfo]],
         ),
         "frameworks": attr.label_list(
-            allow_rules=["ios_framework"],
+            providers=[[AppleBundleInfo, IosFrameworkBundleInfo]],
         ),
         "launch_images": attr.label_list(allow_files=True),
         "launch_storyboard": attr.label(
@@ -187,7 +186,7 @@ ios_extension = rule_factory.make_bundling_rule(
         "app_icons": attr.label_list(allow_files=True),
         "asset_catalogs": attr.label_list(allow_files=True),
         "frameworks": attr.label_list(
-            allow_rules=["ios_framework"],
+            providers=[[AppleBundleInfo, IosFrameworkBundleInfo]],
         ),
         "_extension_safe": attr.bool(default=True),
     },
@@ -237,7 +236,11 @@ def _ios_framework_impl(ctx):
 ios_framework = rule_factory.make_bundling_rule(
     _ios_framework_impl,
     additional_attrs={
+        "dedupe_unbundled_resources": attr.bool(default=True),
         "extension_safe": attr.bool(default=False),
+        "frameworks": attr.label_list(
+            providers=[[AppleBundleInfo, IosFrameworkBundleInfo]],
+        ),
         "hdrs": attr.label_list(allow_files=[".h"]),
     },
     archive_extension=".zip",
