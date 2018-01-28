@@ -133,8 +133,8 @@ def _ios_application_impl(ctx):
       deps_objc_providers=[deps_objc_provider],
   )
 
-  if ctx.attr.deps:
-    legacy_providers["xctest_app"] = test_support.new_xctest_app_provider(ctx)
+  #if ctx.attr.deps:
+  #  legacy_providers["xctest_app"] = test_support.new_xctest_app_provider(ctx)
 
   runfiles = run_actions.start_simulator(ctx)
 
