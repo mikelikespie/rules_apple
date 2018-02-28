@@ -35,3 +35,8 @@ filegroup(
     ],
     visibility = ["//:__pkg__"],
 )
+
+filegroup(
+    name = "generic_info_plist",
+    srcs = ["Generic-Resources-Info.plist"]
+)

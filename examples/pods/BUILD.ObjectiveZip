@@ -1,0 +1,18 @@
+load("@build_bazel_rules_apple//apple:pod_library.bzl", "pod_library", "pod_resource_bundle")
+
+pod_library(
+  name = "objective-zip",
+  public_headers = glob([
+    "Objective-Zip/*.h",
+    "ZLib/*.h",
+  ]),
+  sdk_dylibs = ["libz"],
+  source_files = glob([
+    "Objective-Zip/*.m",
+    "Objective-Zip/*.h",
+    "MiniZip/*.c",
+    "MiniZip/*.h",
+    #    "ZLib/*.c",
+    "ZLib/*.h",
+  ]),
+)

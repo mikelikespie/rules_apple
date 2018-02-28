@@ -1,0 +1,47 @@
+load("@build_bazel_rules_apple//apple:headermap.bzl", "make_framework_headermap", "make_private_headermap")
+
+make_private_headermap(
+  name = "Branch_private_hmap",
+  hdrs = glob([
+    "Branch-SDK/Branch-SDK/**/*.h",
+  ]),
+)
+
+make_framework_headermap(
+  name = "Branch_should_be_private_but_isnt_hmap",
+  hdrs = glob([
+    "Branch-SDK/Branch-SDK/**/*.h",
+  ]),
+)
+
+make_framework_headermap(
+  name = "Branch_hmap",
+  hdrs = glob([
+    "Branch-SDK/Branch-SDK/*.h",
+  ]),
+  prefix = "Branch",
+)
+
+objc_library(
+  name = "Branch",
+  srcs = glob([
+    "Branch-SDK/Fabric/*.h",
+    "Branch-SDK/Branch-SDK/*.m",
+    "Branch-SDK/Branch-SDK/Networking/**/*.m",
+    "Branch-SDK/Branch-SDK/Networking/**/*.h",
+  ]),
+  hdrs = glob([
+    "Branch-SDK/Branch-SDK/*.h",
+  ]),
+  copts = [
+    "-iquote\"$(GENDIR)/$(location :Branch_private_hmap)\"",
+    "-iquote\".\"",
+  ],
+  enable_modules = True,
+  visibility = ["//visibility:public"],
+  deps = [
+    ":Branch_hmap",
+    ":Branch_private_hmap",
+    ":Branch_should_be_private_but_isnt_hmap",
+  ],
+)

@@ -1,0 +1,10 @@
+load("@build_bazel_rules_apple//apple:pod_library.bzl", "pod_library")
+
+pod_library(
+  name = "OCMock",
+  requires_arc = False,
+  source_files = glob([
+    "Source/OCMock/*.h",
+    "Source/OCMock/*.m",
+  ]),
+)

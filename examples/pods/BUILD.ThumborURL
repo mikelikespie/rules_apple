@@ -1,0 +1,9 @@
+load("@build_bazel_rules_apple//apple:pod_library.bzl", "pod_library")
+
+pod_library(
+  name = "ThumborURL",
+  source_files = glob([
+    "thumborurl/**/*.m",
+    "thumborurl/**/*.h",
+  ]),
+)

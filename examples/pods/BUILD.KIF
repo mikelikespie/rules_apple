@@ -1,0 +1,25 @@
+load("@build_bazel_rules_apple//apple:pod_library.bzl", "pod_library")
+load("@build_bazel_rules_apple//apple:headermap.bzl", "make_framework_headermap")
+
+make_framework_headermap(
+  name = "KIF_flat_hmap",
+  hdrs = glob([
+    "Classes/**/*.h",
+    "Additions/**/*.h",
+  ]),
+  prefix = None,
+)
+
+pod_library(
+  name = "KIF",
+  source_files = glob([
+    "Classes/**/*.h",
+    "Additions/**/*.h",
+    "IdentifierTests/**/*.h",
+    "Classes/**/*.m",
+    "Additions/**/*.m",
+    "IdentifierTests/**/*.m",
+  ]),
+  use_fake_prefix = True,
+  deps = [":KIF_flat_hmap"],
+)
